@@ -66,9 +66,63 @@ def _tests(cat, svc, anoms, changes):
              f"{m} {a['baseline']:.0%} -> {a['current']:.0%}" if a else f"{m} normal")]
 
 
-def test_all(hyps, svc, anoms, changes):
+def _extra(cat, svc, changes, logs, tr):
+    """Tests that use log signatures and trace comparisons. Keyword matching on signatures is deliberately
+    simple (ponytail: let an LLM read the signatures when a provider is wired in)."""
+    def L(*words):
+        return next((g for g in logs if any(w in g["template"].lower() for w in words)), None)
+
+    def sig(g):
+        return f"log signature x{g['count']}: {g['template']}" if g else "no matching log signature"
+
+    errs = tr["error_spans"] if tr else []
+    bn = tr["bottleneck"] if tr else None
+    new = tr["new_ops"] if tr else []
+    t = []
+    if cat == "deployment" and tr:
+        has = any(c["kind"] == "deploy" and c["service"] == svc for c in changes)
+        t.append(("a new code path (span) appears after the change", 2.0 if new and has else (-0.75 if has else 0.0),
+                  f"new operations in traces: {new}" if new else "no new operations in traces"))
+    elif cat == "configuration":
+        e = next((e for e in errs if "timeout=" in (e["sample"] or "")), None)
+        g = L("timeout=")
+        t.append(("errors cite a configured limit (timeout=)", 1.5 if e or g else 0.0, e["sample"] if e else sig(g)))
+    elif cat == "database":
+        pool = bn and bn["name"] == "db.pool.acquire" or any(e["name"] == "db.pool.acquire" for e in errs)
+        if tr:
+            t.append(("db.pool.acquire is the latency bottleneck or failing", 1.0 if pool else -0.5,
+                      f"bottleneck {bn['name']} (+{bn['delta']:.2f}s)" if bn else "no bottleneck span"))
+            t.append(("no new code path explains the pool pressure", 0.5 if not new else -1.0,
+                      "traces use the same operations as baseline" if not new else f"new operations {new}"))
+        t.append(("logs show pool exhaustion", 1.0 if L("pool exhausted") else 0.0, sig(L("pool exhausted"))))
+    elif cat == "dependency":
+        e = next((e for e in errs if e["kind"] == "external" and "timeout=" not in (e["sample"] or "")), None)
+        if tr:
+            t.append(("an external-call span fails with a provider error", 1.5 if e else -0.5, e["sample"] if e else "no failing external span"))
+        t.append(("logs show provider unavailability", 1.0 if L("unavailable", "503") else 0.0, sig(L("unavailable", "503"))))
+    elif cat == "network" and tr:
+        ok = bn and bn["kind"] in ("db", "external") and bn["share"] >= 0.6 and not any(e["name"] == bn["name"] for e in errs)
+        t.append(("latency is concentrated in one upstream span that is slow but not failing", 1.5 if ok else -0.5,
+                  f"{bn['name']} explains {bn['share']:.0%} of added latency" if bn else "no bottleneck"))
+    elif cat == "cpu":
+        if tr:
+            t.append(("added latency is spread across all spans, no single bottleneck", 1.0 if bn and bn["share"] < 0.6 else 0.0,
+                      f"largest single span explains {bn['share']:.0%}" if bn else "no bottleneck"))
+        t.append(("logs show queueing / deadline pressure", 1.0 if L("queue depth", "deadline") else 0.0, sig(L("queue depth", "deadline"))))
+    elif cat == "memory":
+        t.append(("logs show heap exhaustion / GC pressure", 1.5 if L("heap", "outofmemory", "gc overhead") else 0.0,
+                  sig(L("heap", "outofmemory", "gc overhead"))))
+    elif cat == "cache":
+        e = next((e for e in errs if e["kind"] == "cache"), None)
+        if tr:
+            t.append(("cache spans are failing", 1.0 if e else 0.0, e["sample"] if e else "cache spans healthy"))
+        t.append(("logs show redis connection failures", 1.0 if L("redis") else 0.0, sig(L("redis"))))
+    return t
+
+
+def test_all(hyps, svc, anoms, changes, logs=(), traces=None):
     for h in hyps:
-        for pred, w, text in _tests(h["category"], svc, anoms, changes):
+        for pred, w, text in _tests(h["category"], svc, anoms, changes) + _extra(h["category"], svc, changes, logs, traces):
             h["tests"].append(dict(prediction=pred, observed=text, weight=w))
         h["score"] = sum(t["weight"] for t in h["tests"])
     return normalize(hyps)

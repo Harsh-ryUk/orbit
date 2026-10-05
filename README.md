@@ -3,7 +3,7 @@
 AI reliability control plane: investigate a production incident, decide under a deterministic safety policy,
 execute allowlisted remediation, and **prove recovery with telemetry** before calling it resolved.
 
-Status: **milestone 1 — vertical slice against a fault simulator.** Full spec in the project brief.
+Status: **milestone 2 — vertical slice against a fault simulator, now with log and trace agents.** Full spec in the project brief.
 
 ## Run
 
@@ -19,7 +19,7 @@ Demo over the API: `POST /api/sim/inject {"name":"bad_deploy","delay":228}` → 
 
 ## Pipeline (LangGraph, `orbit/graph.py`)
 
-intake → triage (Laya severity) → collect (metrics + deployment agents) → timeline → generate hypotheses →
+intake → triage (Laya severity) → collect (metrics, deployment, **log**, **trace** agents) → timeline → generate hypotheses →
 **test hypotheses against live telemetry** → RAG (runbooks + incident memory) → RCA → remediation candidates →
 Laya action/risk/approval → **policy gate** → [human approval] → execute → **verify recovery** → memory | replan | escalate.
 
@@ -38,16 +38,21 @@ baseline (decisions are logged as `laya-heuristic`). The real model plugs in by 
 Its label set also needs `cache`, `cpu`, `memory` added to the hypothesis categories. No Laya-vs-LLM claim can be made yet.
 
 Evaluation numbers are measured on the **simulator** (virtual time) and measure the pipeline, not production.
-Latest: RCA 11/12, recovered-or-correctly-escalated 12/12. The miss, `db_exhaustion_decoy_deploy`, is a real limit:
-with metrics only, a benign deploy shortly before a DB leak is indistinguishable from a bad deploy. ORBIT rolls back the
-wrong thing, verification fails, it replans and then fixes it. Log/trace evidence is what should resolve this.
+Latest: RCA 12/12, recovered-or-correctly-escalated 12/12. **Read that with care:** the simulator's log messages and
+span names are authored by me alongside the faults, and the hypothesis tests were tuned against these 12 scenarios.
+The agent logic is generic (signature grouping with variable parts stripped, span-set diff vs baseline, latency-bottleneck
+attribution, failing-path extraction), but 100% here is not evidence it will hold on real telemetry.
+The ablation in `evaluation/reports/latest.md` is the meaningful result: without logs/traces RCA drops to 11/12 and the
+decoy case (`db_exhaustion_decoy_deploy`: benign deploy shortly before a DB leak) rolls back the wrong thing before replanning.
+Traces fix it because the benign deploy introduces no new span operations. If the logs/traces backend is down, ORBIT
+degrades to metrics-only instead of failing (tested).
 "Wrong-action rate" counts actions outside the ground-truth fix set because the simulator cannot make things worse.
 
 ## Not built yet (deliberate)
 
 | Spec item | State |
 |---|---|
-| Log agent, Trace agent | needs real Loki/Tempo or simulator-emitted logs/traces — next |
+| Real Loki/Tempo backends for log/trace agents | agents read the target's `logs()`/`traces()`; simulator emits them, Loki/Tempo adapters are next |
 | Prometheus/Loki/Tempo/OTel stack, Docker Compose | simulator implements the target interface in-process; adapter is next |
 | Qdrant RAG | runbooks are front-matter markdown; memory is Jaccard over symptoms (swap point marked) |
 | PostgreSQL / Redis | SQLite |

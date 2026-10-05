@@ -7,7 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from . import hypothesis as hyp
 from . import tools as toolbox
-from .agents import deployment_agent, fmt, metrics_agent, timeline
+from .agents import deployment_agent, fmt, log_agent, metrics_agent, timeline, trace_agent
 from .laya import HeuristicLaya
 from .policy import Policy
 from .rag import load_runbooks, retrieve
@@ -22,6 +22,8 @@ class IncidentState(TypedDict, total=False):
     tried: list
     anomalies: list
     changes: list
+    logs: list
+    traces: dict
     hypotheses: list
     root_cause: dict
     candidates: list
@@ -104,10 +106,18 @@ class Orbit:
             for c in changes:
                 S._ev(id, "deployment", c["kind"], f"{c['kind']} {c['service']} {c['previous']} -> {c['ref']} "
                       f"{c['delta_s']:.0f}s before onset (correlation {c['correlation']})")
-            return dict(anomalies=anoms, changes=changes)
+            logs = log_agent(tg, onset)
+            for g in logs[:5]:
+                S._ev(id, "logs", "signature", f"{g['service']} {g['level']} x{g['count']}{' (new)' if g['is_new'] else ''}: {g['sample']}")
+            tr = trace_agent(tg, st.get(id)["service"], onset)
+            if tr:
+                bn = tr["bottleneck"]
+                S._ev(id, "traces", "summary", f"{tr['service']}: failing path {' -> '.join(tr['path']) or 'none'}; "
+                      f"bottleneck {bn['name'] if bn else 'none'}; new operations {tr['new_ops'] or 'none'}")
+            return dict(anomalies=anoms, changes=changes, logs=logs, traces=tr)
 
         def build_timeline(s):
-            st.update(s["incident_id"], timeline=timeline(s["anomalies"], s["changes"], tg.now()))
+            st.update(s["incident_id"], timeline=timeline(s["anomalies"], s["changes"], tg.now(), s["logs"]))
             return {}
 
         def generate(s):
@@ -117,7 +127,7 @@ class Orbit:
 
         def test(s):
             id = s["incident_id"]
-            hs = hyp.test_all(s["hypotheses"], st.get(id)["service"], s["anomalies"], s["changes"])
+            hs = hyp.test_all(s["hypotheses"], st.get(id)["service"], s["anomalies"], s["changes"], s["logs"], s["traces"])
             for h in hs:
                 for t in h["tests"]:
                     S._ev(id, "hypothesis_test", h["category"], f"{h['category']}: predicts '{t['prediction']}' -> {t['observed']} "

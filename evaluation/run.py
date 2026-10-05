@@ -9,8 +9,10 @@ from simulator.sim import Sim
 from .scenarios import SCENARIOS
 
 
-def run_one(sc, laya=None):
+def run_one(sc, laya=None, blind=False):
     sim, store = Sim(), Store()
+    if blind:  # ablation: metrics + deployments only
+        sim.logs = sim.traces = lambda *a: []
     orbit = Orbit(sim, store, laya=laya)
     sim.wait(1200)                          # healthy history for baselines
     t_fault = sim.now()
@@ -77,9 +79,18 @@ def report(rs, s):
     return "\n".join(L) + "\n"
 
 
+def ablation(full, blind):
+    keys = ["RCA accuracy", "handled correctly (recovered or correctly escalated)", "wrong-action rate (actions outside ground-truth fix set)",
+            "mean MTTR, simulated seconds"]
+    L = ["", "## Ablation: do logs + traces help?", "", "| metric | metrics only | + logs & traces |", "|---|---|---|"]
+    f = lambda v: "-" if v is None else f"{v:.1%}" if v <= 1 else f"{v:.0f}"
+    return "\n".join(L + [f"| {k} | {f(blind[k])} | {f(full[k])} |" for k in keys]) + "\n"
+
+
 if __name__ == "__main__":
     rs = [run_one(sc) for sc in SCENARIOS]
-    out = report(rs, summarize(rs))
+    full = summarize(rs)
+    out = report(rs, full) + ablation(full, summarize([run_one(sc, blind=True) for sc in SCENARIOS]))
     p = Path(__file__).parent / "reports" / "latest.md"
     p.write_text(out)
     print(out)

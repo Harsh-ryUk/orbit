@@ -6,7 +6,10 @@ an instant flip. Time is virtual: `wait()` advances it, nothing really sleeps.
 
 This is the interface ORBIT expects from any target (a Prometheus/K8s adapter
 would implement the same methods): now, wait, services, metrics, history,
-changes, apply.
+changes, apply, logs(since, until), traces(since, until).
+
+Logs and traces are generated from the same fault state as the metrics. The signals are authored here
+(message templates, span names); the agents that read them are generic.
 """
 import math
 import time
@@ -16,6 +19,18 @@ HEALTHY = dict(error_rate=0.02, p95_latency=0.32, cpu=0.43, memory=0.5, db_pool=
                cache_hit=0.9, dep_error_rate=0.01, upstream_latency=0.05)
 TAU = 30.0   # seconds; lag time constant
 STEP = 5.0   # seconds; metric sample interval
+ROOT = {"orders": "POST /orders", "payments": "POST /payments", "users": "GET /users"}
+REPO = {"orders": "OrderRepository.fetch_batch", "payments": "LedgerRepository.fetch_batch", "users": "UserRepository.fetch_batch"}
+_LOG = {  # fault -> (level, template); {n} varies per line, {rid} is a request id
+    "bad_deploy": ("ERROR", "PoolError: connection pool exhausted (max=20, waiting={n}) in %s req={rid}"),
+    "db_exhaustion": ("ERROR", "PoolError: connection pool exhausted (max=20, waiting={n}) req={rid}"),
+    "config_regression": ("ERROR", "ReadTimeout: upstream call exceeded timeout=1s req={rid}"),
+    "cpu_saturation": ("WARN", "worker queue depth {n}, request deadline exceeded req={rid}"),
+    "memory_leak": ("ERROR", "OutOfMemory: heap usage {n}% GC overhead limit exceeded"),
+    "redis_down": ("ERROR", "ConnectionRefusedError: redis:6379 connection refused req={rid}"),
+    "dependency_down": ("ERROR", "api.elevenlabs.io returned 503 Service Unavailable req={rid}"),
+    "network_latency": ("WARN", "slow upstream call took {n}ms req={rid}"),
+}
 # faults that overlay symptoms on one service; value = metric overrides
 _SYMPTOMS = {
     "bad_deploy": dict(error_rate=0.31, p95_latency=2.1, db_pool=0.97),
@@ -38,6 +53,7 @@ class Sim:
         self.cur = {(s, m): v for s in SERVICES for m, v in HEALTHY.items()}
         self.cur[("redis", "redis_up")] = 1.0
         self._hist = []  # (t, {key: value})
+        self._logs, self._traces, self._seq = [], [], 0
         self._snap()
 
     # ---- target interface -------------------------------------------------
@@ -54,6 +70,7 @@ class Sim:
                 self.cur[key] += (v - self.cur[key]) * k
             self.t += dt
             self._snap()
+            self._emit()
 
     def metrics(self):
         return dict(self.cur)
@@ -63,6 +80,12 @@ class Sim:
 
     def changes(self):
         return list(self._changes)
+
+    def logs(self, since, until):
+        return [l for l in self._logs if since <= l["t"] <= until]
+
+    def traces(self, since, until):
+        return [t for t in self._traces if since <= t["t"] <= until]
 
     def apply(self, action, **p):
         return getattr(self, "_do_" + action)(**p)
@@ -90,6 +113,50 @@ class Sim:
 
     def _snap(self):
         self._hist.append((self.t, dict(self.cur)))
+
+    def _active(self, s):
+        return [f for f in self.faults if f["start"] <= self.t and (
+            f["service"] == s or f["name"] == "redis_down" or (f["name"] == "dependency_down" and s in ("orders", "payments")))]
+
+    def _emit(self):
+        for s in SERVICES:
+            act = self._active(s)
+            err = self.cur[(s, "error_rate")]
+            self._logs.append(dict(t=self.t, service=s, level="INFO", msg=f"health check ok in {self.cur[(s, 'p95_latency')] * 1000:.0f}ms"))
+            for i in range(int(err * 20 + 0.5) if act else 0):
+                f = act[i % len(act)]
+                lvl, tpl = _LOG[f["name"]]
+                self._seq += 1
+                msg = (tpl % REPO[s] if "%s" in tpl else tpl).format(n=10 + self._seq % 7, rid=f"{self._seq:08x}")
+                self._logs.append(dict(t=self.t, service=s, level=lvl, msg=msg))
+            for i in range(3):
+                self._traces.append(self._trace(s, i < round(err * 3), {f["name"] for f in act}))
+
+    def _trace(self, s, failing, names):
+        mult = 4 if "cpu_saturation" in names else 2 if "memory_leak" in names else 1
+        sp = [dict(name=ROOT[s], kind="server", dur=self.cur[(s, "p95_latency")] * 0.8, err=None)]
+
+        def add(name, kind, dur, err=None):
+            sp.append(dict(name=name, kind=kind, dur=dur, err=err))
+
+        pool = bool(names & {"bad_deploy", "db_exhaustion"})
+        if "bad_deploy" in names:
+            add(REPO[s], "internal", 0.15 * mult)
+        add("db.pool.acquire", "db", 1.8 if pool else 0.02 * mult, "PoolTimeout: no connection in 2s" if pool and failing else None)
+        add("db.query", "db", 1.0 if "network_latency" in names else 0.1 * mult)
+        down = "redis_down" in names
+        add("redis.get", "cache", 0.5 if down else 0.005 * mult, "ConnectionRefusedError: redis:6379" if down else None)
+        if s != "users":
+            if "config_regression" in names:
+                add("external_api.call", "external", 1.0, "ReadTimeout after 1s (timeout=1s)" if failing else None)
+            elif "dependency_down" in names:
+                add("external_api.call", "external", 0.9, "503 Service Unavailable from api.elevenlabs.io" if failing else None)
+            else:
+                add("external_api.call", "external", 0.12 * mult)
+        if failing:  # errors propagate to the root span
+            errs = [x["err"] for x in sp[1:] if x["err"]]
+            sp[0]["err"] = errs[0] if errs else ("ConnectionResetError: worker restarted" if "memory_leak" in names else "DeadlineExceeded")
+        return dict(t=self.t, service=s, spans=sp)
 
     def _targets(self):
         tgt = {(s, m): v for s in SERVICES for m, v in HEALTHY.items()}

@@ -52,12 +52,34 @@ def test_no_safe_action_escalates():
     assert inc["final_status"] == "ESCALATED" and inc["actions"] == [] and inc["rca"]["category"] == "dependency"
 
 
-def test_wrong_first_action_is_detected_and_replanned():
-    sim, orbit, inc = incident("db_exhaustion_decoy_deploy")
+def _blind(sim):
+    sim.logs = sim.traces = lambda *a: []   # logs/traces backend down
+    return sim
+
+
+def test_traces_disambiguate_benign_deploy_from_db_leak():
+    _, _, inc = incident("db_exhaustion_decoy_deploy")
+    assert inc["rca"]["category"] == "database" and [a["action_type"] for a in inc["actions"]] == ["restart_service"]
+    assert any(e["source"] == "traces" for e in inc["evidence"]) and any(e["source"] == "logs" for e in inc["evidence"])
+
+
+def test_missing_logs_and_traces_degrade_to_metrics_only_and_replan():
+    sim, orbit, inc = incident("db_exhaustion_decoy_deploy", sim=_blind(Sim()))
     while inc["status"] == "AWAITING_APPROVAL":
         inc = orbit.approve(inc["id"], "carol")
-    assert [a["action_type"] for a in inc["actions"]] == ["rollback_deployment", "restart_service"]
+    assert not any(e["source"] in ("logs", "traces") for e in inc["evidence"])
+    assert [a["action_type"] for a in inc["actions"]] == ["rollback_deployment", "restart_service"]  # wrong first guess, then replan
     assert inc["final_status"] == "RECOVERED"
+
+
+def test_log_and_trace_agents_find_what_changed():
+    from orbit.agents import log_agent, metrics_agent, trace_agent
+    sim = Sim(); sim.wait(1200); sim.inject("bad_deploy", "orders"); sim.wait(90)
+    onset = min(a["onset"] for a in metrics_agent(sim))
+    logs, tr = log_agent(sim, onset), trace_agent(sim, "orders", onset)
+    assert logs[0]["is_new"] and "pool exhausted" in logs[0]["template"] and "<n>" in logs[0]["template"]
+    assert tr["new_ops"] == ["OrderRepository.fetch_batch"] and tr["bottleneck"]["name"] == "db.pool.acquire"
+    assert tr["path"][0] == "POST /orders" and tr["path"][-1] == "db.pool.acquire"
 
 
 def test_policy_never_lets_confidence_authorize_high_risk():
