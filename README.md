@@ -37,12 +37,13 @@ PromQL for metrics/history, LogQL for logs, TraceQL for traces. Remediation runs
 bad deploy (v2.8.1 holds DB connections), config regression (tight timeout), connection leak, memory leak, Redis stop, provider outage.
 Host ports: Prometheus 19090, Loki 13100, Tempo 13200, apps 18001-18004. Tear down: `docker compose -p orbit -f infra/docker/docker-compose.yml down -v`.
 
-**Verified on the real stack so far: one scenario, `bad_deploy`** (detected at 52% errors / p95 2.4s / DB pool 100%; RCA deployment, 92%;
-rollback after approval; recovery confirmed from Prometheus in ~130s; see `evaluation/reports/real.md`). The other six real scenarios
-(`db_exhaustion`, decoy deploy, `config_regression`, `memory_leak`, `redis_down`, `dependency_down`) are implemented but **have not been
-run end to end yet**, so no real-stack accuracy figure exists beyond n=1. CPU saturation is not available on the compose target
-(`scale_service` raises: there is no load balancer in front of replicas). The adapter's parsing and rollback logic are covered by
-offline tests (`tests/test_real.py`).
+**Real-stack results (`evaluation/reports/real.md`): 7 scenarios, one run each.** RCA correct 7/7, six recovered with telemetry-verified
+recovery in 65-130s (mean 77s), the provider outage correctly escalated, no wrong actions, 2 human approvals (rollbacks) and 1 escalation.
+That includes the decoy case (benign deploy right before a connection leak): diagnosed `database` at 85% and fixed with a restart, no wrong rollback.
+Caveats: n=1 per scenario, so no variance; the faults and the signals the app emits were authored by me alongside the hypothesis tests, and
+all seven scenarios are single-fault, single-service. This shows the pipeline works on real telemetry; it does not show it generalizes to
+production. CPU saturation is not available on the compose target (`scale_service` raises: no load balancer in front of replicas).
+The adapter's parsing and rollback logic are covered by offline tests (`tests/test_real.py`).
 
 ## Pipeline (LangGraph, `orbit/graph.py`)
 
@@ -79,7 +80,7 @@ degrades to metrics-only instead of failing (tested).
 
 | Spec item | State |
 |---|---|
-| Prometheus/Loki/Tempo/OTel stack, Docker Compose | **done** (`infra/docker`, `orbit/real.py`); only 1 of 7 real scenarios run so far |
+| Prometheus/Loki/Tempo/OTel stack, Docker Compose | **done** (`infra/docker`, `orbit/real.py`); 7 real scenarios run once each |
 | Qdrant RAG | runbooks are front-matter markdown; memory is Jaccard over symptoms (swap point marked) |
 | PostgreSQL / Redis | SQLite |
 | Next.js dashboard, incident page, evidence graph | not started |
