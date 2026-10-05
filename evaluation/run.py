@@ -29,7 +29,7 @@ def run_one(sc, laya=None, blind=False, target=None, warm=1200, poll_max=240):
     r = dict(name=sc.name, detected=bool(hit))
     if not hit:
         return r
-    inc = orbit.open_incident(*hit) if False else orbit.open_incident(hit[0], dict(reason=hit[1]))
+    inc = orbit.open_incident(hit[0], dict(reason=hit[1]))
     t0 = time.perf_counter()
     inc = orbit.investigate(inc["id"])
     approvals = 0
@@ -40,7 +40,13 @@ def run_one(sc, laya=None, blind=False, target=None, warm=1200, poll_max=240):
     cat = (inc["rca"] or {}).get("category")
     recovered = inc["final_status"] == "RECOVERED"
     wrong = [a for a in done if a["action_type"] not in sc.fix]
-    r.update(detect_latency_s=inc["started_at"] - t_fault, rca_ok=cat == sc.category, rca_conf=(inc["rca"] or {}).get("confidence"),
+    first_act = min((a["executed_at"] for a in done), default=None)
+    t_end = inc["started_at"] + inc["mttr_s"] if recovered else inc.get("escalated_at")
+    # timings, all from the alert (detector trigger) unless named otherwise. Approvals are granted instantly here,
+    # so these exclude any real human approval wait.
+    r.update(t_fault=t_fault, alert_reason=hit[1], time_to_action_s=first_act and first_act - inc["started_at"],
+             time_to_resolution_s=t_end and t_end - inc["started_at"], fault_to_resolution_s=t_end and t_end - t_fault,
+             detect_latency_s=inc["started_at"] - t_fault, rca_ok=cat == sc.category, rca_conf=(inc["rca"] or {}).get("confidence"),
              service_ok=inc["service"] == sc.service, expected="ESCALATED" if not sc.fix else "RECOVERED",
              final=inc["final_status"], handled=inc["final_status"] == ("RECOVERED" if sc.fix else "ESCALATED"),
              actions=[a["action_type"] for a in done], n_actions=len(done), n_wrong=len(wrong), approvals=approvals,

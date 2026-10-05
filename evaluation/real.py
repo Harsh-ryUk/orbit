@@ -1,6 +1,8 @@
 """Run fault scenarios against the REAL docker stack (needs it up). `python -m evaluation.real [scenario ...]`
 Slow by design: every scenario resets the stack, warms up, injects, waits for detection, remediates and verifies in real time."""
+import json
 import sys
+import time
 from pathlib import Path
 
 from orbit.real import RealTarget
@@ -25,16 +27,20 @@ SCENARIOS = [
 ]
 
 if __name__ == "__main__":
-    names = sys.argv[1:]
-    chosen = [s for s in SCENARIOS if not names or s.name in names]
+    args = sys.argv[1:]
+    reps = int(args.pop(args.index("--repeat") + 1)) if "--repeat" in args else 1
+    args = [a for a in args if a != "--repeat"]
+    chosen = [s for s in SCENARIOS if not args or s.name in args] * reps
     target = RealTarget()
     rs = []
     for sc in chosen:
         print("running", sc.name, flush=True)
         rs.append(run_one(sc, target=target, warm=150, poll_max=120))
+        with open(Path(__file__).parent / "reports" / "orbit_real_runs.jsonl", "a") as f:   # raw per-run record, never overwritten
+            f.write(json.dumps(dict(rs[-1], run_at=time.time())) + "\n")
         print({k: v for k, v in rs[-1].items() if k in ("rca_ok", "final", "actions", "mttr_s", "rca_conf")}, flush=True)
     target.reset()
     out = report(rs, summarize(rs)).replace("(simulator)", "(real docker stack: OTel -> Prometheus/Loki/Tempo)")
     out = out.replace("simulated seconds", "seconds").replace("Virtual-time simulator; numbers measure the pipeline, not production.", "Real containers and real telemetry on one laptop; wall-clock times.")
-    Path(__file__).parent.joinpath("reports", "real.md").write_text(out)
+    Path(__file__).parent.joinpath("reports", "real_latest.md").write_text(out)
     print(out)

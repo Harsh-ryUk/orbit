@@ -269,7 +269,7 @@ class Orbit:
             id = s["incident_id"]
             why = "approval rejected" if (s.get("approval") or {}).get("approved") is False else \
                 "no safe automated action" if not s.get("selected_action") else "remediation attempts exhausted or blocked"
-            S._set(id, "ESCALATED", final_status="ESCALATED", escalation_reason=why, resolved_at=None)
+            S._set(id, "ESCALATED", final_status="ESCALATED", escalation_reason=why, resolved_at=None, escalated_at=tg.now())
             S.store.audit(incident_id=id, agent="escalation", decision="ESCALATE", rationale=why)
             return dict(final_status="ESCALATED")
 

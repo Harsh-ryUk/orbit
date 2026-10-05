@@ -1,0 +1,275 @@
+{
+ "uid": "orbit-golden",
+ "title": "Shop golden signals",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "5s",
+ "time": {
+  "from": "now-15m",
+  "to": "now"
+ },
+ "panels": [
+  {
+   "id": 1,
+   "type": "timeseries",
+   "title": "Error rate",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "(sum by (service)(rate(shop_requests_total{status=\"error\"}[30s])) or 0 * sum by (service)(rate(shop_requests_total[30s]))) / sum by (service)(rate(shop_requests_total[30s]))",
+     "legendFormat": "{{service}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "timeseries",
+   "title": "p95 latency (s)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 0,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "histogram_quantile(0.95, sum by (service, le)(rate(shop_request_duration_seconds_bucket[30s])))",
+     "legendFormat": "{{service}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "timeseries",
+   "title": "CPU utilization",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 0,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "max by (service)(shop_cpu_utilization)",
+     "legendFormat": "{{service}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "type": "timeseries",
+   "title": "Memory utilization",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 7,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "max by (service)(shop_memory_utilization)",
+     "legendFormat": "{{service}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "timeseries",
+   "title": "DB pool utilization",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 7,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "max by (service)(shop_db_pool_utilization)",
+     "legendFormat": "{{service}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "type": "timeseries",
+   "title": "Cache hit ratio",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 7,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "(sum by (service)(rate(shop_cache_requests_total{result=\"hit\"}[30s])) or 0 * sum by (service)(rate(shop_cache_requests_total[30s]))) / sum by (service)(rate(shop_cache_requests_total[30s]))",
+     "legendFormat": "{{service}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "Downstream/dependency error rate",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 14,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "(sum by (service)(rate(shop_external_calls_total{status=\"error\"}[30s])) or 0 * sum by (service)(rate(shop_external_calls_total[30s]))) / sum by (service)(rate(shop_external_calls_total[30s]))",
+     "legendFormat": "{{service}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "DB query p95 (s)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 14,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "histogram_quantile(0.95, sum by (service, le)(rate(shop_db_query_duration_seconds_bucket[30s])))",
+     "legendFormat": "{{service}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "type": "timeseries",
+   "title": "Redis up (1 = up)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 14,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "min(shop_redis_up)",
+     "legendFormat": "{{service}}",
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     }
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "type": "logs",
+   "title": "Warnings and errors (Loki)",
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 28,
+    "w": 24,
+    "h": 10
+   },
+   "targets": [
+    {
+     "expr": "{service_name=~\".+\"} |~ \"^(ERROR|WARN)\"",
+     "refId": "A",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     }
+    }
+   ],
+   "options": {
+    "sortOrder": "Descending"
+   }
+  }
+ ]
+}
