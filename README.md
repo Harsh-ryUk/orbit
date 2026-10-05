@@ -45,6 +45,21 @@ all seven scenarios are single-fault, single-service. This shows the pipeline wo
 production. CPU saturation is not available on the compose target (`scale_service` raises: no load balancer in front of replicas).
 The adapter's parsing and rollback logic are covered by offline tests (`tests/test_real.py`).
 
+## Dashboard (Next.js)
+
+```bash
+.venv/bin/uvicorn orbit.api:app --port 8000          # API; ORBIT_TARGET=sim (default) or real (needs the docker stack)
+cd apps/web && npm install && npm run dev            # http://localhost:3000
+```
+Pages: **Dashboard** (active incidents, awaiting approval, recovery and automation rate, median MTTR, service health, recent changes, and in
+simulator mode a one-click "inject fault and run to alert"), **Incident** (lifecycle, approve/reject gate, RCA with supporting and contradicting
+evidence, timeline, hypothesis board and evidence graph, evidence list, metric charts with baselines, log signatures, trace analysis,
+Laya and policy decisions, recovery verification, agent trace, hash-chained audit log), **Evaluation** (real-stack runs, simulator suite, human
+baseline vs ORBIT once sessions exist). The UI polls every few seconds; there is no websocket push. In simulator mode incidents are in memory and
+reset when the API restarts. Verified: production build, typecheck, lint, the full inject-detect-approve-recover flow on the simulator, phone
+width (375px, no horizontal overflow), and the API in `ORBIT_TARGET=real` against the live stack: health and stats, simulator controls refused, and one real memory-leak incident run through the API (detected, RCA `memory` 98%, auto-restart, recovery verified in 64s, real metric series and audit trail returned). The browser UI itself was only exercised against the simulator.
+Not built: authentication (the approve button is unauthenticated, so do not expose the API beyond localhost), live voice, real-time push.
+
 ## Pipeline (LangGraph, `orbit/graph.py`)
 
 intake → triage (Laya severity) → collect (metrics, deployment, **log**, **trace** agents) → timeline → generate hypotheses →
@@ -83,7 +98,7 @@ degrades to metrics-only instead of failing (tested).
 | Prometheus/Loki/Tempo/OTel stack, Docker Compose | **done** (`infra/docker`, `orbit/real.py`); 7 real scenarios run once each |
 | Qdrant RAG | runbooks are front-matter markdown; memory is Jaccard over symptoms (swap point marked) |
 | PostgreSQL / Redis | SQLite |
-| Next.js dashboard, incident page, evidence graph | not started |
+| Authentication / multi-user approvals, websocket push | not started (the dashboard is localhost-only) |
 | LiveKit voice | Phase 2 |
 | Rollback-on-failed-remediation (undo) | no current tool has a meaningful undo; failed actions are left in place and replanned |
 | `hypotheses/{id}/test`, `remediation/execute` endpoints | tests run during investigation; `approve` is the execution trigger |

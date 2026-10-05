@@ -114,6 +114,7 @@ class Orbit:
                 bn = tr["bottleneck"]
                 S._ev(id, "traces", "summary", f"{tr['service']}: failing path {' -> '.join(tr['path']) or 'none'}; "
                       f"bottleneck {bn['name'] if bn else 'none'}; new operations {tr['new_ops'] or 'none'}")
+            st.update(id, anomalies=anoms, log_signatures=logs[:10], trace_summary=tr)  # shown by the dashboard
             return dict(anomalies=anoms, changes=changes, logs=logs, traces=tr)
 
         def build_timeline(s):
