@@ -1,0 +1,12 @@
+# Deterministic safety policy. Laya confidence is never sufficient authorization on its own.
+autonomy_level: 4          # 3 = execute only with approval, 4 = auto-execute low-risk actions
+min_rca_confidence: 0.6    # below this, even low-risk actions need a human
+max_attempts: 3            # failed remediation attempts before escalation
+
+actions:
+  restart_service:      { risk: LOW, auto_execute: true }
+  scale_service:        { risk: LOW, auto_execute: true }
+  clear_cache:          { risk: LOW, auto_execute: true }
+  change_config:        { risk: MEDIUM, approval_required: true }
+  rollback_deployment:  { risk: HIGH, approval_required: true }
+  database_operation:   { risk: CRITICAL, auto_execute: false, approval_required: true }

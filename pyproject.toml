@@ -1,0 +1,15 @@
+[project]
+name = "orbit"
+version = "0.1.0"
+description = "ORBIT: AI reliability control plane. Observe. Reason. Act. Verify."
+requires-python = ">=3.10"
+dependencies = ["fastapi", "uvicorn", "pydantic", "langgraph", "pyyaml", "httpx"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["orbit", "simulator", "evaluation"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
