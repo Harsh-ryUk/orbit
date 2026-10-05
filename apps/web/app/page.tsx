@@ -57,19 +57,19 @@ export default function Dashboard() {
           <Card title="Incidents">
             {incidents.data?.length ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-[13px]">
+                <table className="w-full text-left text-[13px] [&_th]:pr-4 [&_td]:pr-4 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0">
                   <thead className="text-[12px] text-muted">
                     <tr><th className="pb-2 font-medium">ID</th><th className="font-medium">Service</th><th className="font-medium">Sev</th><th className="font-medium">Status</th><th className="font-medium">Root cause</th><th className="font-medium">Started</th><th className="text-right font-medium">MTTR</th></tr>
                   </thead>
                   <tbody>
                     {incidents.data.map((i) => (
                       <tr key={i.id} className="border-t border-border hover:bg-surface-2">
-                        <td className="py-2"><Link href={`/incidents/${i.id}`} className="font-mono text-accent hover:underline">{i.id}</Link></td>
+                        <td className="whitespace-nowrap py-2"><Link href={`/incidents/${i.id}`} className="font-mono text-accent hover:underline">{i.id}</Link></td>
                         <td>{i.service}</td>
                         <td><Badge tone={sevTone(i.severity)}>{i.severity ?? "–"}</Badge></td>
-                        <td><Badge tone={statusTone(i.status)}>{label(i.status)}</Badge></td>
-                        <td className="max-w-[18rem] truncate">{i.root_cause ?? "–"} {i.root_cause_confidence != null && <span className="num text-muted">{pct(i.root_cause_confidence)}</span>}</td>
-                        <td className="text-muted">{ago(now, i.started_at)}</td>
+                        <td className="whitespace-nowrap"><Badge tone={statusTone(i.status)}>{label(i.status)}</Badge></td>
+                        <td className="max-w-[11rem] truncate">{i.root_cause ?? "–"} {i.root_cause_confidence != null && <span className="num text-muted">{pct(i.root_cause_confidence)}</span>}</td>
+                        <td className="whitespace-nowrap text-muted">{ago(now, i.started_at)}</td>
                         <td className="num text-right">{dur(i.mttr_s)}</td>
                       </tr>
                     ))}

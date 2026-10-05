@@ -53,7 +53,7 @@ export default function EvaluationPage() {
       <Card title="Real docker stack (OpenTelemetry → Prometheus / Loki / Tempo)" right={<span className="text-[12px] text-muted">times from the alert; approvals granted instantly</span>}>
         {groups.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-[13px]">
+            <table className="w-full text-left text-[13px] [&_th]:pr-4 [&_td]:pr-4 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0">
               <thead className="text-[12px] text-muted"><tr><th className="pb-2 font-medium">Scenario</th><th className="font-medium">Runs</th><th className="font-medium">Detected</th><th className="font-medium">RCA</th><th className="font-medium">Outcome</th><th className="font-medium">Action</th><th className="font-medium">Alert → action</th><th className="font-medium">Alert → resolved</th></tr></thead>
               <tbody>{groups.map(([name, rs]) => {
                 const d = rs.filter((r) => r.detected);
@@ -79,7 +79,7 @@ export default function EvaluationPage() {
 
       <Card title="Human baseline vs ORBIT" right={<span className="text-[12px] text-muted">alert → verified recovery</span>}>
         {humanGroups.length ? (
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full text-left text-[13px] [&_th]:pr-4 [&_td]:pr-4 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0">
             <thead className="text-[12px] text-muted"><tr><th className="pb-2 font-medium">Scenario</th><th className="font-medium">Human median (n)</th><th className="font-medium">ORBIT median (n)</th><th className="text-right font-medium">Reduction</th></tr></thead>
             <tbody>{humanGroups.map(([name, hs]) => {
               const o = real.filter((r) => r.name === name && handled(r));
@@ -92,7 +92,7 @@ export default function EvaluationPage() {
 
       <Card title="Simulator suite" right={<span className="text-[12px] text-muted">{sim.summary.scenarios} scenarios, virtual time</span>}>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full text-left text-[13px] [&_th]:pr-4 [&_td]:pr-4 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0">
             <thead className="text-[12px] text-muted"><tr><th className="pb-2 font-medium">Scenario</th><th className="font-medium">RCA</th><th className="font-medium">Confidence</th><th className="font-medium">Outcome</th><th className="font-medium">Actions</th><th className="text-right font-medium">MTTR</th></tr></thead>
             <tbody>{sim.scenarios.map((r) => (
               <tr key={r.name} className="border-t border-border">

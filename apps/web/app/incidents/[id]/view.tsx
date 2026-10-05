@@ -250,7 +250,7 @@ function Remediation({ i }: { i: Incident }) {
       }) : <Card><Empty>{i.status === "ESCALATED" ? "No action was taken: no safe automated remediation exists for this cause." : "No remediation proposed yet."}</Empty></Card>}
       <Card title="Recovery verification" right={i.recovery.length ? <Badge tone={i.recovery.every((r) => r.status === "RECOVERED") ? "ok" : "bad"}>{i.recovery.filter((r) => r.status === "RECOVERED").length}/{i.recovery.length} healthy</Badge> : undefined}>
         {i.recovery.length ? (
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full text-left text-[13px] [&_th]:pr-4 [&_td]:pr-4 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0">
             <thead className="text-[12px] text-muted"><tr><th className="pb-2 font-medium">Metric</th><th className="font-medium">Baseline</th><th className="font-medium">At incident</th><th className="font-medium">After remediation</th><th className="text-right font-medium">Status</th></tr></thead>
             <tbody>{i.recovery.map((r) => {
               const name = r.metric.split(".")[1];
@@ -268,7 +268,7 @@ function Audit({ events }: { events: AuditEvent[] }) {
   return (
     <Card title={`Audit log (${events.length})`} right={<span className="text-[12px] text-muted">hash-chained; secrets redacted</span>}>
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-[12px]">
+        <table className="w-full text-left text-[12px] [&_th]:pr-4 [&_td]:pr-4 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0">
           <thead className="text-muted"><tr><th className="pb-2 font-medium">Time</th><th className="font-medium">Agent</th><th className="font-medium">Decision</th><th className="font-medium">Detail</th></tr></thead>
           <tbody>{events.map((e, k) => {
             const { ts, incident_id: _i, agent, decision, ...rest } = e; void _i;
