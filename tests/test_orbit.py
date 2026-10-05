@@ -53,7 +53,7 @@ def test_no_safe_action_escalates():
 
 
 def _blind(sim):
-    sim.logs = sim.traces = lambda *a: []   # logs/traces backend down
+    sim.logs = sim.traces = lambda *a, **k: []   # logs/traces backend down
     return sim
 
 

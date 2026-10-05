@@ -81,11 +81,11 @@ class Sim:
     def changes(self):
         return list(self._changes)
 
-    def logs(self, since, until):
-        return [l for l in self._logs if since <= l["t"] <= until]
+    def logs(self, since, until, service=None):
+        return [l for l in self._logs if since <= l["t"] <= until and service in (None, l["service"])]
 
-    def traces(self, since, until):
-        return [t for t in self._traces if since <= t["t"] <= until]
+    def traces(self, since, until, service=None):
+        return [t for t in self._traces if since <= t["t"] <= until and service in (None, t["service"])]
 
     def apply(self, action, **p):
         return getattr(self, "_do_" + action)(**p)

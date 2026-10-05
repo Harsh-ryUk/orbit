@@ -3,7 +3,7 @@
 AI reliability control plane: investigate a production incident, decide under a deterministic safety policy,
 execute allowlisted remediation, and **prove recovery with telemetry** before calling it resolved.
 
-Status: **milestone 2 — vertical slice against a fault simulator, now with log and trace agents.** Full spec in the project brief.
+Status: **milestone 3 — the same pipeline now runs against a real OpenTelemetry → Prometheus/Loki/Tempo stack.** Full spec in the project brief.
 
 ## Run
 
@@ -16,6 +16,33 @@ uv venv --python 3.12 && uv pip install -e ".[dev]"
 
 Demo over the API: `POST /api/sim/inject {"name":"bad_deploy","delay":228}` → `POST /api/sim/advance {"seconds":300}`
 → `POST /api/detect` (investigates; stops at `AWAITING_APPROVAL`) → `POST /api/incidents/{id}/remediation/approve {"by":"you"}`.
+
+## Real stack (docker compose)
+
+```bash
+docker compose -p orbit -f infra/docker/docker-compose.yml up -d --build   # ~1 min first time
+.venv/bin/python -m evaluation.real bad_deploy redis_down                  # real-time scenarios, writes evaluation/reports/real.md
+```
+
+```
+loadgen -> orders -> payments -> external (mock provider)      all emit OTLP (traces, metrics, logs)
+              \-> redis, postgres                                       |
+                                                                  OTel Collector
+                                              Tempo (traces) <--------- + --------> Loki (logs)
+                                                                      Prometheus (scrapes collector)
+```
+`orbit/real.py` (`RealTarget`) implements the same target interface as the simulator, so agents, graph and policy are unchanged:
+PromQL for metrics/history, LogQL for logs, TraceQL for traces. Remediation runs only the four allowlisted actions through
+`docker compose` on the host (no generic exec). Faults are injected by `RealTarget.inject()` (chaos tooling ORBIT's tools cannot reach):
+bad deploy (v2.8.1 holds DB connections), config regression (tight timeout), connection leak, memory leak, Redis stop, provider outage.
+Host ports: Prometheus 19090, Loki 13100, Tempo 13200, apps 18001-18004. Tear down: `docker compose -p orbit -f infra/docker/docker-compose.yml down -v`.
+
+**Verified on the real stack so far: one scenario, `bad_deploy`** (detected at 52% errors / p95 2.4s / DB pool 100%; RCA deployment, 92%;
+rollback after approval; recovery confirmed from Prometheus in ~130s; see `evaluation/reports/real.md`). The other six real scenarios
+(`db_exhaustion`, decoy deploy, `config_regression`, `memory_leak`, `redis_down`, `dependency_down`) are implemented but **have not been
+run end to end yet**, so no real-stack accuracy figure exists beyond n=1. CPU saturation is not available on the compose target
+(`scale_service` raises: there is no load balancer in front of replicas). The adapter's parsing and rollback logic are covered by
+offline tests (`tests/test_real.py`).
 
 ## Pipeline (LangGraph, `orbit/graph.py`)
 
@@ -52,8 +79,7 @@ degrades to metrics-only instead of failing (tested).
 
 | Spec item | State |
 |---|---|
-| Real Loki/Tempo backends for log/trace agents | agents read the target's `logs()`/`traces()`; simulator emits them, Loki/Tempo adapters are next |
-| Prometheus/Loki/Tempo/OTel stack, Docker Compose | simulator implements the target interface in-process; adapter is next |
+| Prometheus/Loki/Tempo/OTel stack, Docker Compose | **done** (`infra/docker`, `orbit/real.py`); only 1 of 7 real scenarios run so far |
 | Qdrant RAG | runbooks are front-matter markdown; memory is Jaccard over symptoms (swap point marked) |
 | PostgreSQL / Redis | SQLite |
 | Next.js dashboard, incident page, evidence graph | not started |

@@ -9,16 +9,19 @@ from simulator.sim import Sim
 from .scenarios import SCENARIOS
 
 
-def run_one(sc, laya=None, blind=False):
-    sim, store = Sim(), Store()
+def run_one(sc, laya=None, blind=False, target=None, warm=1200, poll_max=240):
+    """Run one scenario. Default target is a fresh simulator; pass a RealTarget (it is reset first) for the real stack."""
+    if target is not None:
+        target.reset()
+    sim, store = target or Sim(), Store()
     if blind:  # ablation: metrics + deployments only
-        sim.logs = sim.traces = lambda *a: []
+        sim.logs = sim.traces = lambda *a, **k: []
     orbit = Orbit(sim, store, laya=laya)
-    sim.wait(1200)                          # healthy history for baselines
+    sim.wait(warm)                          # healthy history for baselines
     t_fault = sim.now()
     sc.setup(sim)
     hit = None
-    for _ in range(240):                    # poll the detector every 5s for up to 20 min
+    for _ in range(poll_max):               # poll the detector every 5s
         hit = detect(sim)
         if hit:
             break

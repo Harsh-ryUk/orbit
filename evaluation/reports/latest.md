@@ -13,7 +13,7 @@ Virtual-time simulator; numbers measure the pipeline, not production.
 - wrong-action rate (actions outside ground-truth fix set): 0.0%
 - human intervention rate: 50.0%
 - mean MTTR, simulated seconds: 300.0
-- mean investigation wall time, ms: 36.6
+- mean investigation wall time, ms: 23.1
 
 ## Scenarios
 

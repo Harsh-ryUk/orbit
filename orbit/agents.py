@@ -7,7 +7,7 @@ from .store import redact
 # metric -> (breach(v, baseline), healthy(v, baseline)). Healthy has hysteresis vs breach.
 RULES = {
     "error_rate": (lambda v, b: v > max(0.05, b * 3), lambda v, b: v < max(b * 1.5, 0.03)),
-    "p95_latency": (lambda v, b: v > b * 2, lambda v, b: v < b * 1.3),
+    "p95_latency": (lambda v, b: v > max(b * 2, b + 0.15), lambda v, b: v < max(b * 1.3, b + 0.1)),
     "cpu": (lambda v, b: v > 0.9, lambda v, b: v < 0.8),
     "memory": (lambda v, b: v > 0.9, lambda v, b: v < 0.8),
     "db_pool": (lambda v, b: v > 0.85, lambda v, b: v < 0.8),
@@ -18,11 +18,13 @@ RULES = {
 }
 
 
-def baseline(target, key, exclude_last=600):
-    # ponytail: median of history older than 10 min; real deployments want same-hour-last-week
-    t_end = target.now() - exclude_last
-    vals = [m[key] for t, m in target.history() if t < t_end] or [m[key] for _, m in target.history()]
-    return median(vals)
+def baseline(target, key):
+    """Median of history older than `baseline_exclude` seconds (target attr, default 600); None if the series has no history.
+    ponytail: real deployments want same-hour-last-week, not a trailing window."""
+    hist = target.history()
+    t_end = target.now() - getattr(target, "baseline_exclude", 600)
+    vals = [m[key] for t, m in hist if t < t_end and key in m] or [m[key] for _, m in hist if key in m]
+    return median(vals) if vals else None
 
 
 def metrics_agent(target):
@@ -34,11 +36,11 @@ def metrics_agent(target):
         if not rule:
             continue
         b = baseline(target, key)
-        if not rule[0](cur, b):
+        if b is None or not rule[0](cur, b):
             continue
         onset = hist[-1][0]
         for t, m in reversed(hist):
-            if not rule[0](m[key], b):
+            if key in m and not rule[0](m[key], b):
                 break
             onset = t
         out.append(dict(service=key[0], metric=key[1], baseline=b, current=cur, onset=onset))
@@ -96,8 +98,8 @@ def _span_stats(traces):
 def trace_agent(target, service, onset):
     """Compare traces since onset with the pre-incident baseline: new operations, the latency bottleneck,
     failing spans, and a representative failing request path. None when there are no traces to compare."""
-    cur = [t for t in target.traces(onset, target.now()) if t["service"] == service]
-    base = [t for t in target.traces(onset - 360, onset - 60) if t["service"] == service]
+    cur = target.traces(onset, target.now(), service)
+    base = target.traces(onset - 360, onset - 60, service)
     if not cur or not base:
         return None
     c, b = _span_stats(cur), _span_stats(base)

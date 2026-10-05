@@ -1,0 +1,64 @@
+# ORBIT reference stack: instrumented shop -> OTel Collector -> Tempo / Prometheus / Loki.
+# Run from the repo root:  docker compose -p orbit -f infra/docker/docker-compose.yml up -d --build
+# VERSION / TIMEOUT per service are overridden by orbit.real (deploys, config changes, rollbacks).
+x-shop: &shop
+  build: ../../apps/shop
+  depends_on: { postgres: { condition: service_healthy }, otel-collector: { condition: service_started } }
+  environment: &shop-env
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    DATABASE_URL: postgresql://orbit:orbit@postgres:5432/orbit
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: orbit, POSTGRES_PASSWORD: orbit, POSTGRES_DB: orbit }
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U orbit"], interval: 3s, retries: 20 }
+  redis:
+    image: redis:7-alpine
+  external:   # stand-in for a third-party provider (ElevenLabs/Exotel in the AIVA case)
+    <<: *shop
+    environment: { <<: *shop-env, SERVICE: external }
+    ports: ["18004:8000"]
+  payments:
+    <<: *shop
+    environment: { <<: *shop-env, SERVICE: payments, VERSION: "${PAYMENTS_VERSION:-v2.8.0}", TIMEOUT: "${PAYMENTS_TIMEOUT:-5.0}" }
+    ports: ["18002:8000"]
+    cpus: 1.0
+    mem_limit: 256m
+  orders:
+    <<: *shop
+    environment: { <<: *shop-env, SERVICE: orders, VERSION: "${ORDERS_VERSION:-v2.8.0}", TIMEOUT: "${ORDERS_TIMEOUT:-5.0}" }
+    ports: ["18001:8000"]
+    cpus: 1.0
+    mem_limit: 256m
+  users:
+    <<: *shop
+    environment: { <<: *shop-env, SERVICE: users, VERSION: "${USERS_VERSION:-v2.8.0}", TIMEOUT: "${USERS_TIMEOUT:-5.0}" }
+    ports: ["18003:8000"]
+    cpus: 1.0
+    mem_limit: 256m
+  loadgen:
+    <<: *shop
+    command: ["python", "loadgen.py"]
+    environment: { <<: *shop-env, SERVICE: loadgen }
+    depends_on: [orders, users]
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    command: ["--config=/etc/otel.yaml"]
+    volumes: ["./otel-collector.yaml:/etc/otel.yaml:ro"]
+    depends_on: [tempo, loki]
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=2d"]
+    volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["19090:9090"]
+  loki:
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki.yaml"]
+    volumes: ["./loki.yaml:/etc/loki.yaml:ro"]
+    ports: ["13100:3100"]
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes: ["./tempo.yaml:/etc/tempo.yaml:ro"]
+    ports: ["13200:3200"]
