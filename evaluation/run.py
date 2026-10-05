@@ -26,7 +26,7 @@ def run_one(sc, laya=None, blind=False, target=None, warm=1200, poll_max=240):
         if hit:
             break
         sim.wait(5)
-    r = dict(name=sc.name, detected=bool(hit))
+    r = dict(name=sc.name, detected=bool(hit), detector=2)  # 2 = adds the component-down trigger (runs without the key used v1)
     if not hit:
         return r
     inc = orbit.open_incident(hit[0], dict(reason=hit[1]))

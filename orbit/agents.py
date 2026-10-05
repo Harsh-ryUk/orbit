@@ -124,8 +124,16 @@ def timeline(anoms, changes, now, logs=()):
 
 
 def detect(target, sustain=60):
-    """SLO-style trigger (like Prometheus `for:`): a user-facing service breaching error rate or latency for
-    `sustain` seconds, so slower-moving symptoms have surfaced before we investigate. Returns (service, reason) or None."""
-    hits = [a for a in metrics_agent(target) if a["service"] != "redis" and a["metric"] in ("error_rate", "p95_latency")
-            and target.now() - a["onset"] >= sustain]
-    return (hits[0]["service"], fmt(hits[0])) if hits else None
+    """Trigger (like Prometheus `for:`): sustained for `sustain` seconds so slower-moving symptoms surface before we investigate.
+    1. a user-facing service breaching error rate or latency (the SLO signal), else
+    2. a monitored component being down (redis_up) even though callers mask it with a fallback, so no SLO is breached.
+    Returns (service, reason) or None. For (2) the incident is opened on the service that lost its cache, else the first service."""
+    anoms = [a for a in metrics_agent(target) if target.now() - a["onset"] >= sustain]
+    slo = [a for a in anoms if a["service"] != "redis" and a["metric"] in ("error_rate", "p95_latency")]
+    if slo:
+        return slo[0]["service"], fmt(slo[0])
+    down = next((a for a in anoms if a["metric"] == "redis_up"), None)
+    if down:
+        hit = next((a for a in anoms if a["metric"] == "cache_hit"), None)
+        return (hit["service"] if hit else next(x for x in target.services if x != "redis")), fmt(down)
+    return None

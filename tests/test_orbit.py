@@ -120,3 +120,32 @@ def test_api_flow():
     assert c.post(f"/api/incidents/{inc['id']}/remediation/approve", json=dict(by="dev")).json()["final_status"] == "RECOVERED"
     assert c.post(f"/api/incidents/{inc['id']}/remediation/approve", json=dict(by="dev")).status_code == 409
     assert c.get("/api/audit/verify").json()["chain_ok"]
+
+
+class _Masked(Sim):
+    """Callers mask a Redis outage with a DB fallback: no user-facing error or latency signal at all."""
+    def metrics(self):
+        return {k: v for k, v in super().metrics().items() if k[1] not in ("error_rate", "p95_latency")}
+
+    def history(self):
+        return [(t, {k: v for k, v in m.items() if k[1] not in ("error_rate", "p95_latency")}) for t, m in super().history()]
+
+
+def test_detector_pages_on_masked_component_outage():
+    sim = _Masked()
+    sim.wait(1200)
+    assert detect(sim) is None                       # healthy: no page
+    sim.inject("redis_down", "redis")
+    sim.wait(30)
+    assert detect(sim) is None                       # not sustained yet
+    sim.wait(60)
+    svc, why = detect(sim)
+    assert svc == "orders" and "redis_up" in why     # opened on a service that lost its cache
+
+
+def test_slo_breach_still_takes_priority_over_component_trigger():
+    sim = Sim()
+    sim.wait(1200)
+    sim.inject("redis_down", "redis")                # the simulator's redis_down also breaches error rate / latency
+    sim.wait(120)
+    assert "redis_up" not in detect(sim)[1]
